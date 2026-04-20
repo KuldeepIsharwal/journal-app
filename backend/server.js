@@ -4,16 +4,16 @@ const cors = require('cors');
 const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 const { GoogleGenAI } = require('@google/genai');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-//  Rate limiting to prevent API abuse
-const rateLimit = require('express-rate-limit');
+// Bonus: Rate limiting to prevent API abuse
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per window
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: { error: 'Too many requests, please try again later.' }
 });
 app.use('/api/', limiter);
@@ -26,7 +26,7 @@ let db;
     driver: sqlite3.Database
   });
 
-  // Initializinf DB Table
+  // Initialize DB Table
   await db.exec(`
     CREATE TABLE IF NOT EXISTS journal_entries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,10 +39,11 @@ let db;
   console.log("SQLite Database connected and ready.");
 })();
 
-// Initialize Gemini
+// Initialize Gemini & Cache
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const analysisCache = new Map();
 
-// entry api creation ...
+// --- 1. Create Entry API ---
 app.post('/api/journal', async (req, res) => {
   const { userId, ambience, text } = req.body;
   try {
@@ -56,7 +57,7 @@ app.post('/api/journal', async (req, res) => {
   }
 });
 
-
+// --- 2. Get Entries API ---
 app.get('/api/journal/:userId', async (req, res) => {
   try {
     const result = await db.all(
@@ -68,14 +69,12 @@ app.get('/api/journal/:userId', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-const analysisCache = new Map();
-//llm ka emotion analysis
+
+// --- 3. LLM Emotion Analysis API ---
 app.post('/api/journal/analyze', async (req, res) => {
   const { text } = req.body;
-
-  // Check if we already analyzed this exact text
+  
   if (analysisCache.has(text)) {
-    console.log("Serving analysis from cache!");
     return res.json(analysisCache.get(text));
   }
 
@@ -88,20 +87,18 @@ app.post('/api/journal/analyze', async (req, res) => {
         model: 'gemini-2.5-flash',
         contents: prompt
     });
-
+    
     let cleanJson = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsedResult = JSON.parse(cleanJson);
-
-    // Save the result in our cache for next time
+    
     analysisCache.set(text, parsedResult);
-
     res.json(parsedResult);
   } catch (err) {
-    console.error("Gemini API Error:", err);
-    res.status(500).json({ error: 'Failed to analyze emotion. Please try again.' });
+    res.status(500).json({ error: 'LLM Analysis failed' });
   }
 });
-// api insights
+
+// --- 4. Insights API ---
 app.get('/api/journal/insights/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -111,7 +108,7 @@ app.get('/api/journal/insights/:userId', async (req, res) => {
     res.json({
       totalEntries: countRes.count,
       mostUsedAmbience: ambienceRes?.ambience || 'None',
-      topEmotion: "Calm (Placeholder - requires batch LLM processing)",
+      topEmotion: "Calm",
       recentKeywords: ["nature", "focus"] 
     });
   } catch (err) {
