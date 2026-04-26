@@ -1,6 +1,6 @@
-# ArvyaX Journal 
+ Journal App
 
-Hi! This is my full-stack submission for the ArvyaX internship. I built a lightweight, responsive journaling app that lets users log their nature sessions and uses Google's Gemini AI to extract emotional insights.
+Hi! I built a lightweight, responsive journaling app that lets users log their nature sessions and uses Google's Gemini AI to extract emotional insights.
 
 ### Engineering Decisions & Tech Stack
 To keep the application highly portable and easy to test, I chose:
